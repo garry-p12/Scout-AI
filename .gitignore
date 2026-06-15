@@ -1,0 +1,5 @@
+data/*.csv
+models/*.zip
+frontend/dist/
+__pycache__/
+node_modules/
