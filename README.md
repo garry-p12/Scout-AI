@@ -8,7 +8,7 @@ A full-stack football intelligence platform for the FIFA World Cup 2026 dataset.
 Frontend (React + Recharts)
   └─ 4 views: Scout Chat · Player DNA · Manager Sim · Hidden Gems
 
-Orchestrator Agent (Claude claude-sonnet-4-6 + tool use)
+Orchestrator Agent (OpenAI gpt-4o + function calling)
   └─ 4 specialist tools: search_players · find_clones · simulate_substitution · get_hidden_gems
 
 Data & ML Layer (Python / FastAPI)
@@ -22,12 +22,19 @@ Data & ML Layer (Python / FastAPI)
 ### 1. Install Python deps
 ```bash
 pip install fastapi uvicorn pandas numpy scikit-learn faiss-cpu \
-            stable-baselines3 gymnasium anthropic python-dotenv
+            stable-baselines3 gymnasium openai python-dotenv
 ```
 
-### 2. Set your Anthropic API key
+### 2. Set your OpenAI API key
+Create a `.env` file in the project root (recommended):
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+# optional — defaults to gpt-4o
+OPENAI_MODEL=gpt-4o
+```
+…or export it in your shell:
+```bash
+export OPENAI_API_KEY=sk-...
 ```
 
 ### 3. Install frontend deps

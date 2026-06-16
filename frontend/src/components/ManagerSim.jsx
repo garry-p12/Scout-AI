@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import SimulationStorm from './SimulationStorm';
 import { api } from '../lib/api';
 
 const STAGES = ['Group Stage', 'Round of 32', 'Round of 16', 'Quarter Finals', 'Semi Finals', 'Final'];
@@ -47,23 +48,6 @@ function PlayerRow({ player, subbed, onToggleSub, canSub }) {
       >
         {subbed ? 'Undo' : 'Sub'}
       </button>
-    </div>
-  );
-}
-
-function ProbBar({ label, value, color }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-        <span style={{ color: 'var(--muted)', fontSize: 13 }}>{label}</span>
-        <span style={{ fontWeight: 600, color }}>{Math.round(value * 100)}%</span>
-      </div>
-      <div style={{ background: 'var(--surface)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
-        <div style={{
-          width: `${Math.round(value * 100)}%`, height: '100%',
-          background: color, borderRadius: 4, transition: 'width 0.6s ease',
-        }} />
-      </div>
     </div>
   );
 }
@@ -141,75 +125,84 @@ export default function ManagerSim() {
   const players = matchData ? matchData.teams[teamName] || [] : [];
 
   return (
-    <div style={{ padding: 24, height: '100%', overflowY: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20, minHeight: 500 }}>
+    <div style={{ padding: 24, height: '100%', overflowY: 'auto', maxWidth: 1180, margin: '0 auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', gap: 20, minHeight: 500 }}>
         {/* Left: match selector */}
         <div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>TOURNAMENT STAGE</div>
+          <div style={{ marginBottom: 16 }}>
+            <div className="section-label" style={{ marginBottom: 7 }}>Tournament stage</div>
             <select
               value={stage}
               onChange={e => setStage(e.target.value)}
+              className="focus-ring"
               style={{
                 width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
-                borderRadius: 8, padding: '8px 12px', color: 'var(--text)', cursor: 'pointer',
+                borderRadius: 10, padding: '10px 12px', color: 'var(--text)', cursor: 'pointer',
+                transition: 'border-color .15s, box-shadow .15s',
               }}
             >
               {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>SELECT A MATCH</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {matches.slice(0, 10).map(m => (
-              <div
-                key={m.match_id}
-                onClick={() => loadMatch(m.match_id)}
-                style={{
-                  background: selectedMatch === m.match_id ? 'rgba(79,126,247,0.12)' : 'var(--surface2)',
-                  border: `1px solid ${selectedMatch === m.match_id ? 'var(--accent)' : 'var(--border)'}`,
-                  borderRadius: 8, padding: '10px 12px', cursor: 'pointer', transition: 'all 0.15s',
-                }}
-              >
-                <div style={{ fontWeight: 500, fontSize: 12 }}>{m.team} vs {m.opponent}</div>
-                <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 2 }}>
-                  {m.score} · {m.result}
+          <div className="section-label" style={{ marginBottom: 9 }}>Select a match</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {matches.slice(0, 10).map(m => {
+              const on = selectedMatch === m.match_id;
+              return (
+                <div key={m.match_id} onClick={() => loadMatch(m.match_id)} className="hover-lift" style={{
+                  background: on ? 'linear-gradient(120deg, rgba(91,140,255,0.14), rgba(139,92,246,0.08))' : 'var(--surface2)',
+                  border: `1px solid ${on ? 'rgba(91,140,255,0.4)' : 'var(--border)'}`,
+                  borderRadius: 10, padding: '11px 13px', cursor: 'pointer',
+                }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{m.team} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>vs</span> {m.opponent}</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11.5, marginTop: 3 }}>{m.score} · {m.result}</div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* Right: sim panel */}
         <div>
           {!matchData && !loadingMatch && (
-            <div style={{ textAlign: 'center', marginTop: 80, color: 'var(--muted)' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🎮</div>
-              <div>Pick a match to become the manager</div>
+            <div className="fade-up" style={{ textAlign: 'center', marginTop: 90, color: 'var(--muted)' }}>
+              <div style={{
+                width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px',
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+              }}>🎮</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Take the dugout</div>
+              <div style={{ maxWidth: 340, margin: '0 auto', lineHeight: 1.6 }}>
+                Pick a match, make up to 3 substitutions, then run 200 Monte Carlo simulations of the second half.
+              </div>
             </div>
           )}
-          {loadingMatch && <div style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 80 }}>Loading match data...</div>}
+          {loadingMatch && <div className="skeleton" style={{ height: 460, marginTop: 4 }} />}
 
           {matchData && !loadingMatch && (
-            <div>
+            <div className="fade-up">
               {/* Match header */}
-              <div style={{
-                background: 'var(--surface2)', border: '1px solid var(--border)',
-                borderRadius: 12, padding: 16, marginBottom: 16, textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
+              <div className="card" style={{ padding: 18, marginBottom: 16, textAlign: 'center' }}>
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 8, letterSpacing: '.03em' }}>
                   {matchData.tournament_stage} · {matchData.stadium}, {matchData.city}
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  {teamNames[0]} <span style={{ color: 'var(--muted)' }}>vs</span> {teamNames[1]}
+                <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-.01em' }}>
+                  {teamNames[0]} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 18 }}>vs</span> {teamNames[1]}
                 </div>
-                <div style={{ fontSize: 18, marginTop: 4, color: 'var(--amber)' }}>
-                  HT: {Math.floor(matchData.goals_team / 2)} – {Math.floor(matchData.goals_opponent / 2)}
-                  <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>(simulated half-time)</span>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10,
+                  background: 'rgba(255,177,61,0.1)', border: '1px solid rgba(255,177,61,0.25)',
+                  borderRadius: 999, padding: '5px 14px',
+                }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--amber)', fontFamily: "'JetBrains Mono', monospace" }}>
+                    {Math.floor(matchData.goals_team / 2)} – {Math.floor(matchData.goals_opponent / 2)}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>half-time</span>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {/* Players */}
                 <div>
                   <div style={{
@@ -232,62 +225,22 @@ export default function ManagerSim() {
                       canSub={subbedPlayers.size < MAX_SUBS}
                     />
                   ))}
-                  <button
-                    onClick={runSim}
-                    disabled={simulating}
-                    style={{
-                      width: '100%', marginTop: 12, background: 'var(--accent)',
-                      border: 'none', borderRadius: 10, padding: '12px',
-                      color: '#fff', fontSize: 15, fontWeight: 600,
-                      cursor: simulating ? 'wait' : 'pointer',
-                      opacity: simulating ? 0.7 : 1, transition: 'opacity 0.15s',
-                    }}
-                  >
-                    {simulating ? 'Running 200 simulations...' : '▶ Simulate 2nd Half'}
+                  <button onClick={runSim} disabled={simulating} className="btn-primary" style={{
+                    width: '100%', marginTop: 14, padding: '13px', fontSize: 15,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                    {simulating
+                      ? <>Running 200 simulations <span className="typing"><span /><span /><span /></span></>
+                      : '▶ Simulate 2nd Half'}
                   </button>
                 </div>
 
-                {/* Results panel */}
+                {/* Results panel — SimulationStorm */}
                 <div>
-                  {simResult ? (
-                    <div style={{
-                      background: 'var(--surface2)', border: '1px solid var(--border)',
-                      borderRadius: 12, padding: 20,
-                    }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 16, color: 'var(--muted)' }}>
-                        SIMULATION RESULTS
-                        <span style={{ fontSize: 11, marginLeft: 6 }}>({simResult.n_sims} runs)</span>
-                      </div>
-                      <ProbBar label="Win" value={simResult.win_prob} color="var(--green)" />
-                      <ProbBar label="Draw" value={simResult.draw_prob} color="var(--amber)" />
-                      <ProbBar label="Loss" value={simResult.loss_prob} color="var(--red)" />
-                      <div style={{
-                        marginTop: 16, padding: '12px', background: 'var(--surface)',
-                        borderRadius: 8, textAlign: 'center',
-                      }}>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Expected goal diff</div>
-                        <div style={{
-                          fontSize: 24, fontWeight: 700,
-                          color: simResult.expected_goal_diff > 0 ? 'var(--green)' : simResult.expected_goal_diff < 0 ? 'var(--red)' : 'var(--amber)',
-                        }}>
-                          {simResult.expected_goal_diff > 0 ? '+' : ''}{simResult.expected_goal_diff.toFixed(2)}
-                        </div>
-                      </div>
-                      {subbedPlayers.size > 0 && (
-                        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
-                          Substitutions boosted stamina for {subbedPlayers.size} players
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{
-                      background: 'var(--surface2)', border: '1px solid var(--border)',
-                      borderRadius: 12, padding: 20, color: 'var(--muted)', textAlign: 'center',
-                    }}>
-                      <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
-                      <div style={{ fontSize: 13 }}>
-                        Mark players for substitution, then run the simulation to see the outcome probability
-                      </div>
+                  <SimulationStorm simResult={simResult} isSimulating={simulating} />
+                  {simResult && subbedPlayers.size > 0 && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
+                      Substitutions boosted stamina for {subbedPlayers.size} player{subbedPlayers.size !== 1 ? 's' : ''}
                     </div>
                   )}
                 </div>

@@ -139,7 +139,6 @@ def simulate_second_half(
     Returns win/draw/loss probabilities and expected final score.
     """
     results = {"W": 0, "D": 0, "L": 0}
-    goal_diffs = []
 
     # Build stamina/rating arrays from provided player dicts
     staminas = np.array([p.get("stamina_score", 70) for p in team_players], dtype=float)
@@ -152,35 +151,106 @@ def simulate_second_half(
         if 0 <= idx < len(staminas):
             staminas[idx] = min(staminas[idx] + 20, 100)
 
+    timelines = []       # list of per-sim tick arrays
+    goal_diffs = []
+
     for _ in range(n_sims):
         team_g = team_goals_ht
         opp_g  = opp_goals_ht
         s = staminas.copy()
+        ticks = []
 
         for minute in range(46, 91, 5):
-            # Decay stamina
             s = np.clip(s - np.random.uniform(0.2, 0.6, size=len(s)), 0, 100)
             avg_off    = offense.mean() / 100
             avg_stam   = s.mean() / 100
             avg_clutch = clutch.mean() / 100 if minute > 75 else 1.0
-            goal_p = avg_off * avg_stam * avg_clutch * 0.18
-            if random.random() < goal_p:
-                team_g += 1
-            if random.random() < 0.13:
-                opp_g += 1
+            goal_p     = avg_off * avg_stam * avg_clutch * 0.18
+            scored     = 1 if random.random() < goal_p else 0
+            conceded   = 1 if random.random() < 0.13 else 0
+            team_g    += scored
+            opp_g     += conceded
+            ticks.append({
+                "min": minute,
+                "tg":  team_g,
+                "og":  opp_g,
+                "st":  round(float(s.mean()), 2),   # avg stamina this tick
+                "gp":  round(float(goal_p), 4),      # goal probability
+                "sc":  scored,
+                "cc":  conceded,
+            })
 
         diff = team_g - opp_g
         goal_diffs.append(diff)
         results["W" if diff > 0 else "D" if diff == 0 else "L"] += 1
+        timelines.append(ticks)
 
-    total = n_sims
-    avg_diff = np.mean(goal_diffs)
+    # ── Aggregate stats from timelines ────────────────────────────────────
+    total    = n_sims
+    avg_diff = float(np.mean(goal_diffs))
+
+    # Score distribution: {"1-0": 38, "1-1": 46, ...}
+    score_dist: dict[str, int] = {}
+    lead_changes = 0
+    goal_fests   = 0   # sims where total goals >= 4
+    clean_sheets = 0   # sims where opp scored 0 in 2nd half
+    total_goals  = 0
+
+    for i, tl in enumerate(timelines):
+        final_tg = tl[-1]["tg"]
+        final_og = tl[-1]["og"]
+        key = f"{final_tg}-{final_og}"
+        score_dist[key] = score_dist.get(key, 0) + 1
+        total_goals += final_tg + final_og
+        if final_tg + final_og >= 4:
+            goal_fests += 1
+        if final_og == opp_goals_ht:    # no goals conceded in 2nd half
+            clean_sheets += 1
+        prev_diff = team_goals_ht - opp_goals_ht
+        changed = False
+        for tick in tl:
+            curr_diff = tick["tg"] - tick["og"]
+            if not changed and (
+                (prev_diff > 0 and curr_diff <= 0) or
+                (prev_diff <= 0 and curr_diff > 0)
+            ):
+                lead_changes += 1
+                changed = True
+            prev_diff = curr_diff
+
+    # Goals and stamina by minute (averaged across all sims)
+    minutes = [t["min"] for t in timelines[0]]
+    goals_by_min = {
+        m: {
+            "sc": sum(tl[i]["sc"] for tl in timelines),
+            "cc": sum(tl[i]["cc"] for tl in timelines),
+        }
+        for i, m in enumerate(minutes)
+    }
+    stam_by_min = {
+        m: round(float(np.mean([tl[i]["st"] for tl in timelines])), 2)
+        for i, m in enumerate(minutes)
+    }
+
+    # Top 6 scorelines for the chart, sorted by frequency
+    top_scores = sorted(score_dist.items(), key=lambda x: -x[1])[:6]
+
     return {
-        "win_prob":  round(results["W"] / total, 3),
-        "draw_prob": round(results["D"] / total, 3),
-        "loss_prob": round(results["L"] / total, 3),
-        "expected_goal_diff": round(float(avg_diff), 2),
-        "n_sims": n_sims,
+        # ── Summary (same keys as before so nothing else breaks) ──────────
+        "win_prob":            round(results["W"] / total, 3),
+        "draw_prob":           round(results["D"] / total, 3),
+        "loss_prob":           round(results["L"] / total, 3),
+        "expected_goal_diff":  round(avg_diff, 2),
+        "n_sims":              n_sims,
+        # ── Rich data (new) ───────────────────────────────────────────────
+        "timelines":           timelines,          # 200 × 9 ticks
+        "top_scores":          top_scores,         # [["1-0", 38], ...]
+        "goals_by_min":        goals_by_min,       # {46: {sc:17, cc:19}, ...}
+        "stam_by_min":         stam_by_min,        # {46: 68.3, 51: 67.9, ...}
+        "lead_changes":        lead_changes,
+        "goal_fests":          goal_fests,
+        "clean_sheets":        clean_sheets,
+        "avg_goals_per_game":  round(total_goals / total, 2),
     }
 
 

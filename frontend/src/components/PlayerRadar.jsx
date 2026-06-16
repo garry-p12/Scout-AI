@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
+import PlayerUniverse from './PlayerUniverse';
 import { api } from '../lib/api';
 
 const METRICS = [
@@ -21,33 +22,38 @@ function StatBadge({ label, value, color = 'var(--accent)' }) {
   );
 }
 
+function initials(name = '') {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
 function CloneCard({ clone, onSelect }) {
+  const pct = Math.round(clone.similarity * 100);
   return (
-    <div
-      onClick={() => onSelect(clone.player_id)}
-      style={{
-        background: 'var(--surface2)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '12px 14px', cursor: 'pointer',
-        transition: 'border-color 0.15s',
-      }}
-      onMouseOver={e => e.currentTarget.style.borderColor = 'var(--accent)'}
-      onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontWeight: 500 }}>{clone.player_name}</div>
-          <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>
-            {clone.team} · {clone.position}
+    <div onClick={() => onSelect(clone.player_id)} className="card hover-lift" style={{
+      padding: '12px 14px', cursor: 'pointer',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 9, flexShrink: 0, fontSize: 12, fontWeight: 700,
+            background: 'var(--surface3)', border: '1px solid var(--border2)', color: 'var(--text2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{initials(clone.player_name)}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clone.player_name}</div>
+            <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 1 }}>{clone.team} · {clone.position}</div>
           </div>
         </div>
         <div style={{
-          background: 'rgba(79,126,247,0.15)', color: 'var(--accent)',
-          borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 600,
-        }}>
-          {Math.round(clone.similarity * 100)}% match
-        </div>
+          background: 'rgba(91,140,255,0.14)', color: 'var(--accent)', flexShrink: 0,
+          borderRadius: 7, padding: '3px 9px', fontSize: 12, fontWeight: 700,
+        }}>{pct}%</div>
       </div>
-      <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 12, color: 'var(--muted)' }}>
+      {/* similarity bar */}
+      <div style={{ marginTop: 10, height: 5, background: 'var(--surface3)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, var(--accent), var(--accent2))' }} />
+      </div>
+      <div style={{ marginTop: 9, display: 'flex', gap: 14, fontSize: 12, color: 'var(--muted)' }}>
         <span>⭐ {clone.player_rating}</span>
         <span>€{(clone.market_value_eur / 1_000_000).toFixed(1)}M</span>
       </div>
@@ -63,6 +69,8 @@ export default function PlayerRadar() {
   const [clones, setClones] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [showUniverse, setShowUniverse] = useState(true);
+  const [highlightIds, setHighlightIds] = useState([]);
 
   async function doSearch(q) {
     if (!q.trim()) return;
@@ -86,6 +94,7 @@ export default function PlayerRadar() {
       ]);
       setRadar(radarData);
       setClones(clonesData);
+      setHighlightIds([id, ...clonesData.map(c => c.player_id)]);
       const detail = await api.getPlayer(id);
       setSelected(detail);
     } finally {
@@ -100,19 +109,39 @@ export default function PlayerRadar() {
   })) : [];
 
   return (
-    <div style={{ padding: 24, height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: 24, height: '100%', overflowY: 'auto', maxWidth: 1080, margin: '0 auto' }}>
+      {/* Player Universe */}
+      {showUniverse ? (
+        <div className="card" style={{ height: 320, marginBottom: 18, position: 'relative', overflow: 'hidden' }}>
+          <PlayerUniverse onPlayerSelect={selectPlayer} highlightIds={highlightIds} />
+          <button onClick={() => setShowUniverse(false)} style={{
+            position: 'absolute', top: 12, left: 12, zIndex: 6, fontSize: 11.5,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '6px 11px', color: 'var(--text2)', boxShadow: 'var(--shadow)',
+          }}>Hide universe</button>
+        </div>
+      ) : (
+        <button onClick={() => setShowUniverse(true)} style={{
+          marginBottom: 16, fontSize: 12.5,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 9, padding: '8px 14px', color: 'var(--text2)', boxShadow: 'var(--shadow)',
+        }}>🌌 Show player universe</button>
+      )}
+
       {/* Search bar */}
-      <div style={{ position: 'relative', marginBottom: 24, maxWidth: 400 }}>
+      <div style={{ position: 'relative', marginBottom: 24, maxWidth: 440 }}>
+        <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 15 }}>🔍</span>
         <input
           value={query}
           onChange={e => { setQuery(e.target.value); if (e.target.value.length > 1) doSearch(e.target.value); }}
-          placeholder="Search any player..."
+          placeholder="Search any player by name…"
+          className="focus-ring"
           style={{
             width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
-            borderRadius: 24, padding: '10px 18px', color: 'var(--text)', outline: 'none',
+            borderRadius: 12, padding: '11px 18px 11px 42px', color: 'var(--text)', outline: 'none',
+            transition: 'border-color .15s, box-shadow .15s',
           }}
-          onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-          onBlur={e => setTimeout(() => { setResults([]); e.target.style.borderColor = 'var(--border)'; }, 200)}
+          onBlur={e => setTimeout(() => { setResults([]); }, 200)}
         />
         {results.length > 0 && (
           <div style={{
@@ -141,27 +170,46 @@ export default function PlayerRadar() {
         )}
       </div>
 
-      {loading && <div style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 60 }}>Loading...</div>}
+      {loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="skeleton" style={{ height: 420 }} />
+          <div className="skeleton" style={{ height: 420 }} />
+        </div>
+      )}
 
       {!selected && !loading && (
-        <div style={{ textAlign: 'center', marginTop: 80, color: 'var(--muted)' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📡</div>
-          <div>Search a player to see their DNA fingerprint and tactical clones</div>
+        <div className="fade-up" style={{ textAlign: 'center', marginTop: 90, color: 'var(--muted)' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+          }}>🧬</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Decode a player's DNA</div>
+          <div style={{ maxWidth: 360, margin: '0 auto', lineHeight: 1.6 }}>
+            Search any player to see their 8-axis performance fingerprint and their closest tactical clones.
+          </div>
         </div>
       )}
 
       {selected && radar && !loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="fade-up" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           {/* Left: Player info + radar */}
           <div>
             {/* Header */}
-            <div style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: 20, marginBottom: 16,
-            }}>
-              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{selected.player_name}</div>
-              <div style={{ color: 'var(--muted)', marginBottom: 12 }}>
-                {selected.team} · {selected.position} · {selected.nationality}
+            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: 14, flexShrink: 0, fontSize: 18, fontWeight: 800,
+                  background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 8px 20px -8px rgba(91,140,255,0.7)',
+                }}>{initials(selected.player_name)}</div>
+                <div>
+                  <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-.01em' }}>{selected.player_name}</div>
+                  <div style={{ color: 'var(--muted)', marginTop: 2 }}>
+                    {selected.team} · {selected.position} · {selected.nationality}
+                  </div>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                 <StatBadge label="Goals" value={selected.total_goals_tournament} color="var(--green)" />
@@ -172,13 +220,8 @@ export default function PlayerRadar() {
             </div>
 
             {/* Radar */}
-            <div style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: 16,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12, color: 'var(--muted)' }}>
-                PERFORMANCE DNA
-              </div>
+            <div className="card" style={{ padding: 18 }}>
+              <div className="section-label" style={{ marginBottom: 12 }}>Performance DNA</div>
               <div style={{ display: 'flex', gap: 16, fontSize: 11, marginBottom: 8, color: 'var(--muted)' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ display: 'inline-block', width: 10, height: 2, background: '#4f7ef7' }} />
@@ -206,25 +249,18 @@ export default function PlayerRadar() {
 
           {/* Right: Clones + detail stats */}
           <div>
-            <div style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: 20, marginBottom: 16,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14, color: 'var(--muted)' }}>
-                TACTICAL CLONES — most similar across 15 performance dimensions
+            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+              <div className="section-label" style={{ marginBottom: 4 }}>Tactical clones</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+                Most similar across 15 performance dimensions
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {clones.map(c => <CloneCard key={c.player_id} clone={c} onSelect={selectPlayer} />)}
               </div>
             </div>
 
-            <div style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: 20,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14, color: 'var(--muted)' }}>
-                ADVANCED METRICS
-              </div>
+            <div className="card" style={{ padding: 20 }}>
+              <div className="section-label" style={{ marginBottom: 14 }}>Advanced metrics</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
                   ['Creativity', selected.creativity_score?.toFixed(1)],

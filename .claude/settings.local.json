@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import openai, dotenv; print\\('openai', openai.__version__\\)\")",
+      "Bash(python -m py_compile backend/agents.py)",
+      "Bash(pip install *)",
+      "Bash(OPENAI_API_KEY=sk-dummy python -c \"from backend.agents import TOOLS, chat, client, MODEL; print\\('import OK, model=', MODEL\\); print\\('tools=', len\\(TOOLS\\)\\); print\\('first tool keys:', list\\(TOOLS[0].keys\\(\\)\\), TOOLS[0]['function']['name']\\)\")",
+      "Bash(npm run *)",
+      "Bash(python -c \"import sklearn, numpy; print\\('sklearn', sklearn.__version__, 'numpy', numpy.__version__\\)\")",
+      "Bash(python -m py_compile backend/main.py backend/agents.py)",
+      "Bash(python -m py_compile backend/main.py backend/agents.py backend/data_engine.py)",
+      "Bash(python -c \"import faiss, pandas; print\\('faiss+pandas OK'\\)\")",
+      "Bash(OPENAI_API_KEY=sk-dummy uvicorn backend.main:app --port 8011)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s http://localhost:8011/health)",
+      "Bash(break)",
+      "Bash(curl -s http://localhost:8011/embeddings)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(len\\(d\\),'players'\\); print\\('sample:', d[0]\\)\")",
+      "Bash(kill 69060)",
+      "Bash(python3 *)",
+      "Bash(npm install *)",
+      "Bash(node *)"
+    ]
+  }
+}

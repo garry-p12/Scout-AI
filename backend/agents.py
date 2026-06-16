@@ -1,144 +1,174 @@
 """
 Multi-agent orchestrator.
-The orchestrator calls Claude with tool definitions; Claude decides which
-specialist tools to invoke, then we call them against the DataEngine and
+The orchestrator calls OpenAI with tool (function) definitions; the model decides
+which specialist tools to invoke, then we call them against the DataEngine and
 return a composed response to the frontend.
 """
 import json
 import os
 import numpy as np
-from anthropic import Anthropic
+from dotenv import load_dotenv
+from openai import OpenAI
 from .data_engine import get_engine, EMBED_COLS
 from .simulation import simulate_second_half
 
-client = Anthropic()
+load_dotenv()
 
-# ── Tool definitions (Claude will decide which to call) ───────────────────
+client = OpenAI()  # reads OPENAI_API_KEY from the environment
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# ── Tool definitions (the model will decide which to call) ─────────────────
+# OpenAI function-calling format: each tool is wrapped in {"type": "function",
+# "function": {name, description, parameters}}.
 
 TOOLS = [
     {
-        "name": "search_players",
-        "description": (
-            "Search for players by name, team, position, max market value (EUR), "
-            "or minimum player rating. Use this for scout queries like "
-            "'find defenders under 10M EUR' or 'who plays for Brazil'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name":       {"type": "string",  "description": "Partial player name"},
-                "team":       {"type": "string",  "description": "Team name (partial match)"},
-                "position":   {"type": "string",  "description": "One of: Forward, Midfielder, Defender, Goalkeeper"},
-                "max_value":  {"type": "number",  "description": "Maximum market value in EUR"},
-                "min_rating": {"type": "number",  "description": "Minimum player_rating (0-10 scale)"},
-                "limit":      {"type": "integer", "description": "Max results (default 10)"},
-            },
-        },
-    },
-    {
-        "name": "find_clones",
-        "description": (
-            "Find players most similar to a given player using cosine similarity "
-            "across 15 performance dimensions. Great for 'who plays like X?' queries."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "player_id": {"type": "string", "description": "The player_id to find clones for"},
-                "k":         {"type": "integer", "description": "Number of similar players to return (default 5)"},
-            },
-            "required": ["player_id"],
-        },
-    },
-    {
-        "name": "get_player",
-        "description": "Get full stats for a specific player by player_id.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "player_id": {"type": "string"},
-            },
-            "required": ["player_id"],
-        },
-    },
-    {
-        "name": "get_leaderboard",
-        "description": (
-            "Get top players ranked by a metric. Metrics: total_goals_tournament, "
-            "total_assists_tournament, tournament_rating, player_rating, "
-            "creativity_score, clutch_performance_score, market_value_eur."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "metric": {"type": "string"},
-                "limit":  {"type": "integer"},
-            },
-        },
-    },
-    {
-        "name": "get_hidden_gems",
-        "description": (
-            "Find undervalued players: high performance score relative to low market value. "
-            "Returns players sorted by 'gem_score' (performance z-score minus value z-score)."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "position": {"type": "string", "description": "Filter by position (optional)"},
-                "limit":    {"type": "integer"},
-            },
-        },
-    },
-    {
-        "name": "analyze_match",
-        "description": (
-            "Get detailed stats for a specific match including all player performances. "
-            "Use when user asks about a specific game."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "match_id": {"type": "string"},
-            },
-            "required": ["match_id"],
-        },
-    },
-    {
-        "name": "list_matches",
-        "description": "List matches filtered by stage or team.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "stage": {"type": "string", "description": "e.g. Group Stage, Quarter Finals, Final"},
-                "team":  {"type": "string"},
-                "limit": {"type": "integer"},
-            },
-        },
-    },
-    {
-        "name": "simulate_substitution",
-        "description": (
-            "Simulate the second half of a match given a set of substitution decisions. "
-            "Returns win/draw/loss probabilities. Use for Manager Sim questions."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "team_players":    {
-                    "type": "array",
-                    "description": "List of player dicts with stamina_score, player_rating, performance_score",
-                    "items": {"type": "object"},
+        "type": "function",
+        "function": {
+            "name": "search_players",
+            "description": (
+                "Search for players by name, team, position, max market value (EUR), "
+                "or minimum player rating. Use this for scout queries like "
+                "'find defenders under 10M EUR' or 'who plays for Brazil'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name":       {"type": "string",  "description": "Partial player name"},
+                    "team":       {"type": "string",  "description": "Team name (partial match)"},
+                    "position":   {"type": "string",  "description": "One of: Forward, Midfielder, Defender, Goalkeeper"},
+                    "max_value":  {"type": "number",  "description": "Maximum market value in EUR"},
+                    "min_rating": {"type": "number",  "description": "Minimum player_rating (0-10 scale)"},
+                    "limit":      {"type": "integer", "description": "Max results (default 10)"},
                 },
-                "sub_indices":     {
-                    "type": "array",
-                    "description": "0-based indices of players to substitute",
-                    "items": {"type": "integer"},
-                },
-                "team_goals_ht":   {"type": "integer"},
-                "opp_goals_ht":    {"type": "integer"},
             },
-            "required": ["team_players", "sub_indices", "team_goals_ht", "opp_goals_ht"],
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_clones",
+            "description": (
+                "Find players most similar to a given player using cosine similarity "
+                "across 15 performance dimensions. Great for 'who plays like X?' queries."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "player_id": {"type": "string", "description": "The player_id to find clones for"},
+                    "k":         {"type": "integer", "description": "Number of similar players to return (default 5)"},
+                },
+                "required": ["player_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_player",
+            "description": "Get full stats for a specific player by player_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "player_id": {"type": "string"},
+                },
+                "required": ["player_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_leaderboard",
+            "description": (
+                "Get top players ranked by a metric. Metrics: total_goals_tournament, "
+                "total_assists_tournament, tournament_rating, player_rating, "
+                "creativity_score, clutch_performance_score, market_value_eur."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric": {"type": "string"},
+                    "limit":  {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hidden_gems",
+            "description": (
+                "Find undervalued players: high performance score relative to low market value. "
+                "Returns players sorted by 'gem_score' (performance z-score minus value z-score)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "string", "description": "Filter by position (optional)"},
+                    "limit":    {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_match",
+            "description": (
+                "Get detailed stats for a specific match including all player performances. "
+                "Use when user asks about a specific game."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "match_id": {"type": "string"},
+                },
+                "required": ["match_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_matches",
+            "description": "List matches filtered by stage or team.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stage": {"type": "string", "description": "e.g. Group Stage, Quarter Finals, Final"},
+                    "team":  {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulate_substitution",
+            "description": (
+                "Simulate the second half of a match given a set of substitution decisions. "
+                "Returns win/draw/loss probabilities. Use for Manager Sim questions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_players":    {
+                        "type": "array",
+                        "description": "List of player dicts with stamina_score, player_rating, performance_score",
+                        "items": {"type": "object"},
+                    },
+                    "sub_indices":     {
+                        "type": "array",
+                        "description": "0-based indices of players to substitute",
+                        "items": {"type": "integer"},
+                    },
+                    "team_goals_ht":   {"type": "integer"},
+                    "opp_goals_ht":    {"type": "integer"},
+                },
+                "required": ["team_players", "sub_indices", "team_goals_ht", "opp_goals_ht"],
+            },
         },
     },
 ]
@@ -235,45 +265,59 @@ def chat(messages: list[dict], stream_callback=None) -> dict:
     """
     tool_calls_made = []
 
+    # Prepend the system prompt; keep the incoming turns intact.
+    convo = [{"role": "system", "content": SYSTEM_PROMPT}] + list(messages)
+
     while True:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
+        response = client.chat.completions.create(
+            model=MODEL,
             max_tokens=2048,
-            system=SYSTEM_PROMPT,
             tools=TOOLS,
-            messages=messages,
+            messages=convo,
         )
 
-        # Collect any tool use blocks
-        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        text_blocks     = [b for b in response.content if b.type == "text"]
+        msg = response.choices[0].message
 
-        if response.stop_reason == "tool_use" and tool_use_blocks:
-            # Execute all tool calls
-            tool_results = []
-            for block in tool_use_blocks:
-                result_str = dispatch_tool(block.name, block.input)
+        if msg.tool_calls:
+            # Record the assistant turn (with its tool_calls) verbatim.
+            convo.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ],
+            })
+
+            # Execute each tool call and append its result.
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                result_str = dispatch_tool(tc.function.name, args)
                 tool_calls_made.append({
-                    "tool": block.name,
-                    "input": block.input,
+                    "tool": tc.function.name,
+                    "input": args,
                     "result_preview": result_str[:200],
                 })
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
+                convo.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
                     "content": result_str,
                 })
 
-            # Append assistant turn + tool results and loop
-            messages = messages + [
-                {"role": "assistant", "content": response.content},
-                {"role": "user",      "content": tool_results},
-            ]
             continue
 
         # Final text response
-        final_text = "\n".join(b.text for b in text_blocks)
         return {
-            "content": final_text,
+            "content": msg.content or "",
             "tool_calls": tool_calls_made,
         }

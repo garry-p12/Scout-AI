@@ -6,10 +6,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from sklearn.decomposition import PCA
+import numpy as np
 import asyncio
 import json
 
-from .data_engine import get_engine
+from .data_engine import get_engine, EMBED_COLS
 from .agents import chat
 from .simulation import simulate_second_half
 
@@ -110,6 +112,36 @@ def get_match(match_id: str):
 @app.get("/scatter")
 def value_scatter():
     return get_engine().get_value_scatter()
+
+
+# ── Embedding universe (PCA 2D) ───────────────────────────────────────────
+
+@app.get("/embeddings")
+def get_embeddings():
+    """
+    Returns PCA(2) projection of all player embedding vectors.
+    Used by the Player Universe canvas visualisation.
+    """
+    engine = get_engine()
+    vectors = engine.player_df[EMBED_COLS].fillna(0).values.astype("float32")
+    normed = engine.scaler.transform(vectors)
+    pca = PCA(n_components=2)
+    coords = pca.fit_transform(normed)
+    result = []
+    for i, row in enumerate(engine.player_df.itertuples()):
+        result.append({
+            "player_id":   row.player_id,
+            "player_name": row.player_name,
+            "team":        row.team,
+            "position":    row.position,
+            "x":           round(float(coords[i, 0]), 4),
+            "y":           round(float(coords[i, 1]), 4),
+            "player_rating":          round(float(row.player_rating), 1),
+            "total_goals_tournament": int(row.total_goals_tournament),
+            "creativity_score":       round(float(row.creativity_score), 1),
+            "market_value_eur":       int(row.market_value_eur),
+        })
+    return result
 
 
 # ── Simulation ────────────────────────────────────────────────────────────

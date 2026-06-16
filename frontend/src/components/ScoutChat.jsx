@@ -1,59 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
+import { Search, Goal, Dna, Flame, Gem, Trophy } from 'lucide-react';
+import AgentBrain from './AgentBrain';
 import { api } from '../lib/api';
 
 const SUGGESTIONS = [
-  'Find midfielders under €15M who are high creativity',
-  'Who are the top 5 goal scorers in this tournament?',
-  'Find me a defensive midfielder who plays like Rodri',
-  'Which team has the most clutch performers?',
-  'Show me the hidden gems — best value forwards',
-  'Who had the best performance in the Final?',
+  { Icon: Search, text: 'Find midfielders under €15M who are high creativity' },
+  { Icon: Goal,   text: 'Who are the top 5 goal scorers in this tournament?' },
+  { Icon: Dna,    text: 'Find me a defensive midfielder who plays like Rodri' },
+  { Icon: Flame,  text: 'Which team has the most clutch performers?' },
+  { Icon: Gem,    text: 'Show me the hidden gems — best value forwards' },
+  { Icon: Trophy, text: 'Who had the best performance in the Final?' },
 ];
 
-function ToolPill({ tool }) {
+function Avatar() {
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      background: 'rgba(79,126,247,0.12)', border: '1px solid rgba(79,126,247,0.3)',
-      color: '#4f7ef7', borderRadius: 6, padding: '2px 8px', fontSize: 11,
-      marginRight: 4, marginBottom: 4,
-    }}>
-      ⚡ {tool}
-    </span>
+    <div style={{
+      width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+      background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 15, marginRight: 11, marginTop: 1,
+      boxShadow: '0 6px 16px -6px rgba(91,140,255,0.7)',
+    }}>⚽</div>
   );
 }
 
 function Message({ msg }) {
   const isUser = msg.role === 'user';
   return (
-    <div style={{
-      display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start',
-      marginBottom: 16,
+    <div className="fade-up" style={{
+      display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 18,
     }}>
-      {!isUser && (
+      {!isUser && <Avatar />}
+      <div style={{ maxWidth: '74%' }}>
         <div style={{
-          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg, #4f7ef7, #7c56f5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, marginRight: 10, marginTop: 2,
-        }}>⚽</div>
-      )}
-      <div style={{ maxWidth: '75%' }}>
-        {!isUser && msg.toolCalls?.length > 0 && (
-          <div style={{ marginBottom: 6 }}>
-            {msg.toolCalls.map((t, i) => <ToolPill key={i} tool={t.tool} />)}
-          </div>
-        )}
-        <div style={{
-          background: isUser ? 'var(--accent)' : 'var(--surface2)',
-          color: 'var(--text)',
-          borderRadius: isUser ? '16px 16px 4px 16px' : '4px 16px 16px 16px',
-          padding: '10px 14px',
-          lineHeight: 1.6,
-          whiteSpace: 'pre-wrap',
+          background: isUser ? 'linear-gradient(120deg, var(--accent), var(--accent2))' : 'var(--surface2)',
+          color: isUser ? '#fff' : 'var(--text)',
+          borderRadius: isUser ? '16px 16px 5px 16px' : '5px 16px 16px 16px',
+          padding: msg.loading ? '14px 16px' : '12px 16px',
+          lineHeight: 1.65, whiteSpace: 'pre-wrap', fontSize: 14,
           border: isUser ? 'none' : '1px solid var(--border)',
+          boxShadow: isUser ? '0 8px 22px -8px rgba(91,140,255,0.55)' : 'var(--shadow)',
         }}>
-          {msg.content}
+          {msg.loading
+            ? <span className="typing"><span /><span /><span /></span>
+            : msg.content}
         </div>
       </div>
     </div>
@@ -61,21 +51,16 @@ function Message({ msg }) {
 }
 
 export default function ScoutChat() {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: "I'm Scout AI — your World Cup 2026 intelligence analyst. Ask me anything about players, teams, tactics, or value. I have full stats on 1,248 players across 48 teams.",
-      toolCalls: [],
-    }
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [brainState, setBrainState] = useState({ toolCalls: [], isLoading: false, query: '' });
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const isEmpty = messages.length === 0;
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   async function send(text) {
     const userMsg = text || input.trim();
@@ -83,22 +68,18 @@ export default function ScoutChat() {
     setInput('');
 
     const newMessages = [...messages, { role: 'user', content: userMsg }];
-    setMessages([...newMessages, { role: 'assistant', content: '…', toolCalls: [], loading: true }]);
+    setMessages([...newMessages, { role: 'assistant', content: '', toolCalls: [], loading: true }]);
     setLoading(true);
+    setBrainState({ toolCalls: [], isLoading: true, query: userMsg });
 
     try {
-      // Build API message format (exclude our UI-only fields)
       const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
       const result = await api.chat(apiMessages);
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: result.content, toolCalls: result.tool_calls || [] },
-      ]);
+      setBrainState({ toolCalls: result.tool_calls || [], isLoading: false, query: userMsg });
+      setMessages([...newMessages, { role: 'assistant', content: result.content, toolCalls: result.tool_calls || [] }]);
     } catch (e) {
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: `Error: ${e.message}`, toolCalls: [] },
-      ]);
+      setBrainState({ toolCalls: [], isLoading: false, query: userMsg });
+      setMessages([...newMessages, { role: 'assistant', content: `⚠️ ${e.message}`, toolCalls: [] }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -106,64 +87,89 @@ export default function ScoutChat() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-        {messages.map((m, i) => <Message key={i} msg={m} />)}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Suggestions (only when just the intro message) */}
-      {messages.length === 1 && (
-        <div style={{ padding: '0 24px 12px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {SUGGESTIONS.map((s, i) => (
-            <button key={i} onClick={() => send(s)} style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              color: 'var(--muted)', borderRadius: 20, padding: '5px 12px',
-              fontSize: 12, transition: 'all 0.15s',
-            }}
-              onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--text)'; }}
-              onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--muted)'; }}
-            >
-              {s}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 920, margin: '0 auto', width: '100%' }}>
+      {/* Agent reasoning graph */}
+      {(brainState.isLoading || brainState.toolCalls.length > 0) && (
+        <div style={{ paddingTop: 14 }}>
+          <AgentBrain
+            toolCalls={brainState.toolCalls}
+            isLoading={brainState.isLoading}
+            queryText={brainState.query}
+          />
         </div>
       )}
 
+      {/* Messages / hero */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+        {isEmpty ? (
+          <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', paddingTop: 36 }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 18,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30,
+              boxShadow: '0 14px 40px -10px rgba(91,140,255,0.7)', marginBottom: 18,
+            }}>⚽</div>
+            <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 8 }}>
+              Your <span className="gradient-text">World Cup 2026</span> analyst
+            </h1>
+            <p style={{ color: 'var(--muted)', maxWidth: 460, lineHeight: 1.6, marginBottom: 28 }}>
+              Ask about players, tactics, value or matches. The agent calls the right tools across
+              1,248 players and 75 metrics, then composes an analyst-grade answer.
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: 11, width: '100%', maxWidth: 680,
+            }}>
+              {SUGGESTIONS.map((s, i) => (
+                <button key={i} onClick={() => send(s.text)} className="card hover-lift" style={{
+                  display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                  padding: '13px 15px', cursor: 'pointer', color: 'var(--text2)', fontSize: 13, lineHeight: 1.4,
+                }}>
+                  <span style={{
+                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                    background: 'var(--accent-soft)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <s.Icon size={16} strokeWidth={2.2} color="var(--accent)" />
+                  </span>
+                  {s.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {messages.map((m, i) => <Message key={i} msg={m} />)}
+            <div ref={bottomRef} />
+          </>
+        )}
+      </div>
+
       {/* Input */}
-      <div style={{
-        padding: '12px 24px 20px',
-        borderTop: '1px solid var(--border)',
-        display: 'flex', gap: 10,
-      }}>
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Ask about players, teams, tactics..."
-          disabled={loading}
-          style={{
-            flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)',
-            borderRadius: 24, padding: '10px 18px', color: 'var(--text)',
-            outline: 'none', transition: 'border-color 0.15s',
-          }}
-          onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-          onBlur={e => e.target.style.borderColor = 'var(--border)'}
-        />
-        <button
-          onClick={() => send()}
-          disabled={loading || !input.trim()}
-          style={{
-            background: loading ? 'var(--border)' : 'var(--accent)',
-            border: 'none', borderRadius: 24, padding: '10px 20px',
-            color: '#fff', fontWeight: 500, transition: 'all 0.15s',
-            opacity: (!loading && input.trim()) ? 1 : 0.5,
-          }}
-        >
-          {loading ? '...' : 'Ask'}
-        </button>
+      <div style={{ padding: '14px 28px 22px' }}>
+        <div className="card" style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 7px 7px 8px', borderRadius: 16,
+        }}>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+            placeholder="Ask about players, teams, tactics…"
+            disabled={loading}
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              padding: '10px 12px', color: 'var(--text)', fontSize: 14,
+            }}
+          />
+          <button onClick={() => send()} disabled={loading || !input.trim()} className="btn-primary"
+            style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 7 }}>
+            {loading ? <span className="typing"><span /><span /><span /></span> : <>Ask <span style={{ fontSize: 13 }}>↵</span></>}
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 9 }}>
+          Powered by an OpenAI orchestrator with 8 specialist data tools
+        </div>
       </div>
     </div>
   );

@@ -37,6 +37,9 @@ export const api = {
   // Value scatter
   scatter: () => req('/scatter'),
 
+  // Embedding universe (PCA 2D)
+  embeddings: () => req('/embeddings'),
+
   // Simulation
   simulate: (body) => req('/simulate', { method: 'POST', body: JSON.stringify(body) }),
 

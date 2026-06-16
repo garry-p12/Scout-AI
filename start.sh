@@ -6,10 +6,11 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🚀 Starting WC 2026 Scout AI..."
 
-# Check for API key
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-  echo "⚠️  ANTHROPIC_API_KEY not set — Scout Chat will fail."
-  echo "   Export it: export ANTHROPIC_API_KEY=sk-ant-..."
+# Check for API key (also loaded from .env by the backend)
+if [ -z "$OPENAI_API_KEY" ] && [ ! -f "$PROJECT_DIR/.env" ]; then
+  echo "⚠️  OPENAI_API_KEY not set and no .env found — Scout Chat will fail."
+  echo "   Either export it: export OPENAI_API_KEY=sk-..."
+  echo "   Or create $PROJECT_DIR/.env with: OPENAI_API_KEY=sk-..."
 fi
 
 # Backend

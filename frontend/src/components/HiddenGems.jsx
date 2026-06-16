@@ -21,10 +21,8 @@ const POSITION_COLORS = {
 function GemCard({ player, rank }) {
   const valueM = (player.value_m || 0).toFixed(1);
   return (
-    <div style={{
-      background: 'var(--surface2)', border: '1px solid var(--border)',
-      borderRadius: 10, padding: '14px 16px',
-      display: 'flex', alignItems: 'flex-start', gap: 12,
+    <div className="card hover-lift" style={{
+      padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12,
     }}>
       <div style={{
         width: 32, height: 32, borderRadius: 8, flexShrink: 0,
@@ -121,16 +119,41 @@ export default function HiddenGems() {
     ? scatter
     : scatter.filter(p => p.position === posFilter);
 
-  if (loading) return <div style={{ padding: 24, color: 'var(--muted)' }}>Loading...</div>;
+  if (loading) return (
+    <div style={{ padding: 24, maxWidth: 1180, margin: '0 auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="skeleton" style={{ height: 360 }} />
+        <div className="skeleton" style={{ height: 360 }} />
+      </div>
+    </div>
+  );
+
+  const topGem = gems[0];
+  const avgGoals = scatter.length ? (scatter.reduce((s, p) => s + (p.total_goals_tournament || 0), 0) / scatter.length).toFixed(1) : '0';
 
   return (
-    <div style={{ padding: 24, height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: 24, height: '100%', overflowY: 'auto', maxWidth: 1180, margin: '0 auto' }}>
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+        {[
+          { label: 'Players analysed', value: scatter.length.toLocaleString(), accent: 'var(--accent)' },
+          { label: 'Top gem', value: topGem?.player_name || '—', accent: 'var(--green)', small: true },
+          { label: 'Best gem score', value: topGem ? `+${topGem.gem_score?.toFixed(2)}` : '—', accent: 'var(--green)' },
+          { label: 'Avg goals / player', value: avgGoals, accent: 'var(--amber)' },
+        ].map(k => (
+          <div key={k.label} className="card" style={{ padding: '14px 16px' }}>
+            <div className="section-label" style={{ marginBottom: 7 }}>{k.label}</div>
+            <div style={{
+              fontSize: k.small ? 15 : 22, fontWeight: 800, color: k.accent, letterSpacing: '-.01em',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {/* Scatter chart */}
-        <div style={{
-          background: 'var(--surface2)', border: '1px solid var(--border)',
-          borderRadius: 12, padding: 20,
-        }}>
+        <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <div style={{ fontWeight: 500 }}>Value vs Performance</div>
@@ -182,10 +205,7 @@ export default function HiddenGems() {
         </div>
 
         {/* Leaderboard */}
-        <div style={{
-          background: 'var(--surface2)', border: '1px solid var(--border)',
-          borderRadius: 12, padding: 20,
-        }}>
+        <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontWeight: 500 }}>Leaderboard</div>
             <select
@@ -233,11 +253,8 @@ export default function HiddenGems() {
       </div>
 
       {/* Hidden Gems list */}
-      <div style={{
-        background: 'var(--surface2)', border: '1px solid var(--border)',
-        borderRadius: 12, padding: 20,
-      }}>
-        <div style={{ fontWeight: 500, marginBottom: 4 }}>💎 Hidden Gems</div>
+      <div className="card" style={{ padding: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>💎 Hidden Gems</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
           Highest performance relative to market value — the players your rivals haven't noticed
         </div>
